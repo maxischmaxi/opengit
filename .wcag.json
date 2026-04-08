@@ -1,0 +1,7 @@
+{
+  "$schema": "https://raw.githubusercontent.com/maxischmaxi/wcag-lsp/main/wcag-lsp.schema.json",
+  "severity": { "A": "off", "AA": "warning", "AAA": "error" },
+  "ignore": {
+    "patterns": ["node_modules/**", "dist/**", "build/**"]
+  }
+}
