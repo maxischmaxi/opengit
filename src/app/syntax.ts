@@ -279,6 +279,30 @@ const previewStyleEntries = (theme: AppTheme) => [
     style: { foreground: theme.colors.accent, bold: true },
   },
   {
+    scope: ["markup.strong"],
+    style: { foreground: theme.colors.text, bold: true },
+  },
+  {
+    scope: ["markup.italic"],
+    style: { foreground: theme.colors.text, italic: true },
+  },
+  {
+    scope: ["markup.strikethrough"],
+    style: { foreground: theme.colors.muted, dim: true },
+  },
+  {
+    scope: ["markup.raw"],
+    style: { foreground: theme.colors.warning },
+  },
+  {
+    scope: ["markup.link", "markup.link.label"],
+    style: { foreground: theme.colors.accentSoft },
+  },
+  {
+    scope: ["markup.link.url"],
+    style: { foreground: theme.colors.accentSoft, underline: true },
+  },
+  {
     scope: ["markup.list"],
     style: { foreground: theme.colors.accentSoft },
   },

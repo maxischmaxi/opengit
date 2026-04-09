@@ -1,13 +1,14 @@
 import type { TabSelectRenderable } from "@opentui/core";
 import { useEffect, useRef, useState } from "react";
 
-import { listMergeRequests } from "../api/gitlab";
+import { listChangeRequests } from "../api";
 import {
   getInputThemeProps,
   getSelectThemeProps,
   getTabSelectThemeProps,
   useTheme,
 } from "../app/theme";
+import { useProviderKind } from "../hooks/useProviderKind";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Loader } from "../components/Loader";
@@ -24,7 +25,7 @@ import {
   type KeymapItem,
 } from "../util/keys";
 
-const mrStates = ["opened", "merged", "closed"] as const;
+const mrStates = ["open", "merged", "closed"] as const;
 
 export const mergeRequestsListKeymap: KeymapItem[] = [
   { key: "Tab", description: "Cycle state" },
@@ -35,6 +36,8 @@ export const mergeRequestsListKeymap: KeymapItem[] = [
 
 export const MergeRequestsList = ({ projectId }: { projectId: number }) => {
   const theme = useTheme();
+  const providerKind = useProviderKind();
+  const crPrefix = providerKind === "github" ? "#" : "!";
   const { dialog } = useAppState();
   const navigation = useNavigation();
   const tabsRef = useRef<TabSelectRenderable>(null);
@@ -63,7 +66,7 @@ export const MergeRequestsList = ({ projectId }: { projectId: number }) => {
 
   const result = useAsync(
     async () =>
-      listMergeRequests(projectId, {
+      listChangeRequests(projectId, {
         state: mrStates[stateIndex],
         search: debouncedSearch || undefined,
         page,
@@ -188,9 +191,9 @@ export const MergeRequestsList = ({ projectId }: { projectId: number }) => {
             flexGrow={1}
             selectedIndex={selectedIndex}
             options={result.data.items.map((mergeRequest) => ({
-              name: truncate(`!${mergeRequest.iid} ${mergeRequest.title}`, 72),
+              name: truncate(`${crPrefix}${mergeRequest.iid} ${mergeRequest.title}`, 72),
               description: truncate(
-                mergeRequest.author?.name ?? mergeRequest.web_url,
+                mergeRequest.authorName ?? mergeRequest.webUrl,
                 88,
               ),
               value: mergeRequest.iid,

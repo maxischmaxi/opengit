@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  getMergeRequestDiff,
-  type MergeRequestDiffChange,
-} from "../api/gitlab";
+  getChangeRequestDiff,
+  type DiffChange,
+} from "../api";
 import { getSelectThemeProps, useTheme } from "../app/theme";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -21,7 +21,7 @@ export const mergeRequestDiffKeymap: KeymapItem[] = [
   { key: "r", description: "Reload" },
 ];
 
-const buildDiffText = (change: MergeRequestDiffChange) => {
+const buildDiffText = (change: DiffChange) => {
   const headerOld = change.newFile ? "/dev/null" : `a/${change.oldPath}`;
   const headerNew = change.deleted ? "/dev/null" : `b/${change.newPath}`;
 
@@ -48,7 +48,7 @@ export const MergeRequestDiff = ({
   const dialogOpen = dialog !== null;
 
   const result = useAsync(
-    async () => getMergeRequestDiff(projectId, iid),
+    async () => getChangeRequestDiff(projectId, iid),
     [projectId, iid],
   );
 

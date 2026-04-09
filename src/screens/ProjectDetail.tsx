@@ -6,19 +6,28 @@ import {
   getPreviewTreeSitterClient,
   resolvePreviewHighlightFiletype,
 } from "../app/syntax";
-import { getSelectThemeProps, useTheme } from "../app/theme";
+import { useTheme } from "../app/theme";
 import {
   getProject,
   getProjectReadme,
   getRepositoryFileRaw,
   listRepositoryTree,
   type RepositoryTreeEntry,
-} from "../api/gitlab";
+} from "../api";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { ChangeRequestList } from "../components/ChangeRequestList";
+import { type ExplorerEntry } from "../components/FileExplorer";
 import { Loader } from "../components/Loader";
+import { ProjectOverview } from "../components/ProjectOverview";
+import {
+  ProjectSidebar,
+  type ProjectSection,
+  type ProjectSectionId,
+} from "../components/ProjectSidebar";
 import { useAsync } from "../hooks/useAsync";
 import { useDialogAwareKeyboard } from "../hooks/useDialogAwareKeyboard";
+import { useProviderKind } from "../hooks/useProviderKind";
 import { useAppState } from "../state/AppContext";
 import { formatDate } from "../util/format";
 import {
@@ -36,31 +45,9 @@ export const projectDetailKeymap: KeymapItem[] = [
   { key: "r", description: "Reload overview" },
 ];
 
-type ProjectSectionId =
-  | "overview"
-  | "mergeRequests"
-  | "pipelines"
-  | "repository"
-  | "packageRegistry"
-  | "settings";
-
-type ProjectSection = {
-  id: ProjectSectionId;
-  label: string;
-  description: string;
-};
-
 type FocusArea = "sidebar" | "files" | "preview" | "content";
 
-type ExplorerEntry = {
-  kind: "parent" | "tree" | "blob";
-  key: string;
-  name: string;
-  path: string;
-  displayName: string;
-};
-
-const projectSections: ProjectSection[] = [
+const getProjectSections = (isGitHub: boolean): ProjectSection[] => [
   {
     id: "overview",
     label: "Project",
@@ -68,8 +55,8 @@ const projectSections: ProjectSection[] = [
   },
   {
     id: "mergeRequests",
-    label: "Merge requests",
-    description: "Coming soon",
+    label: isGitHub ? "Pull requests" : "Merge requests",
+    description: isGitHub ? "Open pull requests" : "Open merge requests",
   },
   {
     id: "pipelines",
@@ -93,45 +80,6 @@ const projectSections: ProjectSection[] = [
   },
 ];
 
-const textFileExtensions = new Set([
-  "c",
-  "cc",
-  "cpp",
-  "css",
-  "csv",
-  "env",
-  "go",
-  "graphql",
-  "h",
-  "hpp",
-  "html",
-  "ini",
-  "java",
-  "js",
-  "json",
-  "jsx",
-  "lock",
-  "log",
-  "lua",
-  "md",
-  "markdown",
-  "mjs",
-  "py",
-  "rb",
-  "rs",
-  "scss",
-  "sh",
-  "sql",
-  "svg",
-  "toml",
-  "ts",
-  "tsx",
-  "txt",
-  "xml",
-  "yaml",
-  "yml",
-]);
-
 const getParentPath = (path: string) => {
   const lastSlashIndex = path.lastIndexOf("/");
 
@@ -140,56 +88,6 @@ const getParentPath = (path: string) => {
   }
 
   return path.slice(0, lastSlashIndex);
-};
-
-const isMarkdownPath = (path: string) =>
-  /(?:^|\/)readme(?:\.[a-z0-9._-]+)?$/i.test(path) || /\.mdx?$/i.test(path);
-
-const guessFiletype = (path: string) => {
-  const fileName = path.split("/").pop()?.toLowerCase() ?? "";
-
-  if (fileName === "dockerfile") return "dockerfile";
-  if (fileName === "makefile") return "makefile";
-  if (fileName === ".gitignore") return "gitignore";
-
-  const extension = fileName.includes(".")
-    ? fileName.split(".").pop()
-    : undefined;
-  return extension || undefined;
-};
-
-const isPreviewableTextFile = (path: string, content: string) => {
-  if (content.includes("\u0000")) {
-    return false;
-  }
-
-  if (isMarkdownPath(path)) {
-    return true;
-  }
-
-  const filetype = guessFiletype(path);
-
-  if (filetype && textFileExtensions.has(filetype)) {
-    return true;
-  }
-
-  for (const character of content.slice(0, 4000)) {
-    const codePoint = character.codePointAt(0) ?? 0;
-
-    if (
-      codePoint === 0x0009 ||
-      codePoint === 0x000a ||
-      codePoint === 0x000d ||
-      (codePoint >= 0x0020 && codePoint <= 0x007e) ||
-      (codePoint >= 0x00a0 && codePoint <= 0x024f)
-    ) {
-      continue;
-    }
-
-    return false;
-  }
-
-  return true;
 };
 
 const cycleFocusArea = (
@@ -220,6 +118,11 @@ const ProjectPlaceholder = ({
 
 export const ProjectDetail = ({ projectId }: { projectId: number }) => {
   const theme = useTheme();
+  const providerKind = useProviderKind();
+  const projectSections = useMemo(
+    () => getProjectSections(providerKind === "github"),
+    [providerKind],
+  );
   const { dialog } = useAppState();
   const dialogOpen = dialog !== null;
   const sidebarRef = useRef<SelectRenderable>(null);
@@ -245,7 +148,7 @@ export const ProjectDetail = ({ projectId }: { projectId: number }) => {
 
   useEffect(() => () => previewSyntaxStyle.destroy(), [previewSyntaxStyle]);
 
-  const defaultRef = projectResult.data?.default_branch ?? "HEAD";
+  const defaultRef = projectResult.data?.defaultBranch ?? "HEAD";
   const isOverview = currentSection.id === "overview";
 
   const treeResult = useAsync(async () => {
@@ -528,7 +431,10 @@ export const ProjectDetail = ({ projectId }: { projectId: number }) => {
   }
 
   const project = projectResult.data;
-  const filesBoxHeight = Math.max(8, Math.min(14, explorerEntries.length + 2));
+  const previewFocused = focusArea === "preview" && !dialogOpen;
+  const filesBoxHeight = previewFocused
+    ? Math.max(5, Math.min(8, explorerEntries.length + 2))
+    : Math.max(10, Math.min(20, explorerEntries.length + 2));
   const filesPaneBackgroundColor =
     focusArea === "files" && !dialogOpen
       ? theme.colors.surfaceAlt
@@ -542,211 +448,11 @@ export const ProjectDetail = ({ projectId }: { projectId: number }) => {
     ? treeSitterClient
     : undefined;
 
-  const renderFilesPane = () => {
-    if (treeResult.loading) {
-      return <Loader label="Loading files…" />;
-    }
+  const filesFocused = focusArea === "files" && !dialogOpen;
+  const previewPaneFocused = focusArea === "preview" && !dialogOpen;
 
-    if (treeResult.error) {
-      return <ErrorBanner error={treeResult.error as Error} />;
-    }
-
-    if (explorerEntries.length === 0) {
-      return (
-        <EmptyState
-          title="Empty repository root"
-          description="This project has no files or folders in the selected location."
-        />
-      );
-    }
-
-    return (
-      <scrollbox
-        ref={filesRef}
-        focused={focusArea === "files" && !dialogOpen}
-        flexGrow={1}
-      >
-        <box flexDirection="column" gap={0}>
-          {explorerEntries.map((entry, index) => {
-            const isSelected = index === fileSelectionIndex;
-            const backgroundColor =
-              focusArea === "files" && !isSelected
-                ? theme.colors.surfaceAlt
-                : theme.colors.surface;
-
-            return (
-              <box
-                id={`explorer-row-${index}`}
-                key={entry.key}
-                backgroundColor={backgroundColor}
-                paddingLeft={1}
-                paddingRight={1}
-                flexDirection="column"
-              >
-                <text
-                  fg={
-                    entry.kind === "tree"
-                      ? theme.colors.accent
-                      : entry.kind === "parent"
-                        ? theme.colors.accentSoft
-                        : theme.colors.text
-                  }
-                  wrapMode="none"
-                  truncate
-                >
-                  {entry.displayName}
-                </text>
-              </box>
-            );
-          })}
-        </box>
-      </scrollbox>
-    );
-  };
-
-  const renderPreviewPane = () => {
-    if (openedFilePath) {
-      if (filePreviewResult.loading) {
-        return <Loader label="Loading file preview…" />;
-      }
-
-      if (filePreviewResult.error) {
-        return <ErrorBanner error={filePreviewResult.error as Error} />;
-      }
-
-      if (!filePreviewResult.data) {
-        return (
-          <EmptyState
-            title="Preview unavailable"
-            description="The selected file could not be loaded."
-          />
-        );
-      }
-
-      if (isMarkdownPath(openedFilePath)) {
-        return (
-          <scrollbox
-            ref={previewRef}
-            focused={focusArea === "preview" && !dialogOpen}
-            flexGrow={1}
-          >
-            <markdown
-              content={filePreviewResult.data.content}
-              syntaxStyle={previewSyntaxStyle}
-              fg={theme.colors.text}
-              bg={previewPaneBackgroundColor}
-              tableOptions={{ borders: false, outerBorder: false }}
-              treeSitterClient={previewTreeSitterClient}
-            />
-          </scrollbox>
-        );
-      }
-
-      if (
-        isPreviewableTextFile(openedFilePath, filePreviewResult.data.content)
-      ) {
-        return (
-          <scrollbox
-            ref={previewRef}
-            focused={focusArea === "preview" && !dialogOpen}
-            flexGrow={1}
-          >
-            <code
-              content={filePreviewResult.data.content}
-              filetype={highlightFiletype}
-              syntaxStyle={previewSyntaxStyle}
-              fg={theme.colors.text}
-              bg={previewPaneBackgroundColor}
-              treeSitterClient={previewTreeSitterClient}
-            />
-          </scrollbox>
-        );
-      }
-
-      return (
-        <EmptyState
-          title="Unsupported preview"
-          description="This file cannot be rendered in the terminal preview yet."
-        />
-      );
-    }
-
-    if (!repositoryPath) {
-      if (readmeResult.loading) {
-        return <Loader label="Loading README…" />;
-      }
-
-      if (readmeResult.error) {
-        return <ErrorBanner error={readmeResult.error as Error} />;
-      }
-
-      if (readmeResult.data) {
-        return (
-          <scrollbox
-            ref={previewRef}
-            focused={focusArea === "preview" && !dialogOpen}
-            flexGrow={1}
-          >
-            <markdown
-              content={readmeResult.data.content}
-              syntaxStyle={previewSyntaxStyle}
-              fg={theme.colors.text}
-              bg={previewPaneBackgroundColor}
-              tableOptions={{ borders: false, outerBorder: false }}
-              treeSitterClient={previewTreeSitterClient}
-            />
-          </scrollbox>
-        );
-      }
-
-      return (
-        <EmptyState
-          title="No README"
-          description="This project does not have a README in the repository root."
-        />
-      );
-    }
-
-    return (
-      <EmptyState
-        title="No file selected"
-        description="Open a file to preview it here."
-      />
-    );
-  };
-
-  const renderOverview = () => (
-    <box flexDirection="column" gap={1} flexGrow={1}>
-      <box
-        backgroundColor={filesPaneBackgroundColor}
-        padding={1}
-        height={filesBoxHeight}
-        flexDirection="column"
-      >
-        {renderFilesPane()}
-      </box>
-      <box
-        backgroundColor={previewPaneBackgroundColor}
-        padding={1}
-        flexGrow={1}
-        flexDirection="column"
-      >
-        {renderPreviewPane()}
-      </box>
-    </box>
-  );
-
-  const renderSectionContent = () => {
+  const renderPlaceholderContent = () => {
     switch (currentSection.id) {
-      case "overview":
-        return renderOverview();
-      case "mergeRequests":
-        return (
-          <ProjectPlaceholder
-            title="Merge requests"
-            description="Project merge requests page will be implemented later."
-          />
-        );
       case "pipelines":
         return (
           <ProjectPlaceholder
@@ -786,52 +492,65 @@ export const ProjectDetail = ({ projectId }: { projectId: number }) => {
         backgroundColor={theme.colors.surface}
         padding={1}
         flexDirection="column"
+        flexShrink={0}
+        height={6}
         gap={0}
       >
         <text wrapMode="none" truncate>
-          <strong>{project.name_with_namespace}</strong>
+          <strong>{project.fullName}</strong>
         </text>
         <text fg={theme.colors.muted} wrapMode="none" truncate>
           {project.description ?? "No description"}
         </text>
         <text fg={theme.colors.muted} wrapMode="none" truncate>
-          {`${project.visibility} · ${project.default_branch ?? "no default branch"} · Updated ${formatDate(project.last_activity_at)}`}
+          {`${project.visibility} · ${project.defaultBranch ?? "no default branch"} · Updated ${formatDate(project.lastActivityAt)}`}
         </text>
         <text fg={theme.colors.muted} wrapMode="none" truncate>
-          {`${project.web_url} · ${project.open_issues_count} open issues · ${project.star_count} stars`}
+          {`${project.webUrl} · ${project.openIssuesCount} open issues · ${project.starCount} stars`}
         </text>
       </box>
 
       <box flexDirection="row" gap={1} flexGrow={1}>
-        <box
-          width={28}
-          backgroundColor={theme.colors.surface}
-          padding={1}
-          flexDirection="column"
-          gap={1}
-        >
-          <text fg={theme.colors.muted}>Project</text>
-          <select
-            ref={sidebarRef}
-            focused={focusArea === "sidebar" && !dialogOpen}
-            flexGrow={1}
-            selectedIndex={sectionIndex}
-            options={projectSections.map((section) => ({
-              name: section.label,
-              description: section.description,
-              value: section.id,
-            }))}
-            onChange={(index) => setSectionIndex(index)}
-            onSelect={(index) => setSectionIndex(index)}
-            {...getSelectThemeProps(theme)}
-            backgroundColor={theme.colors.surface}
-            focusedBackgroundColor={theme.colors.surfaceElevated}
-          />
-        </box>
+        <ProjectSidebar
+          sections={projectSections}
+          selectedIndex={sectionIndex}
+          focused={focusArea === "sidebar" && !dialogOpen}
+          sidebarRef={sidebarRef}
+          onChange={setSectionIndex}
+        />
 
-        {isOverview ? (
-          <box flexGrow={1}>{renderSectionContent()}</box>
-        ) : (
+        <ProjectOverview
+          visible={isOverview}
+          explorerEntries={explorerEntries}
+          fileSelectionIndex={fileSelectionIndex}
+          filesFocused={filesFocused}
+          filesLoading={treeResult.loading}
+          filesError={treeResult.error}
+          filesBoxHeight={filesBoxHeight}
+          filesPaneBackgroundColor={filesPaneBackgroundColor}
+          filesRef={filesRef}
+          openedFilePath={openedFilePath}
+          fileData={filePreviewResult.data}
+          fileLoading={filePreviewResult.loading}
+          fileError={filePreviewResult.error}
+          readmeData={readmeResult.data}
+          readmeLoading={readmeResult.loading}
+          readmeError={readmeResult.error}
+          repositoryPath={repositoryPath}
+          previewFocused={previewPaneFocused}
+          previewPaneBackgroundColor={previewPaneBackgroundColor}
+          syntaxStyle={previewSyntaxStyle}
+          treeSitterClient={previewTreeSitterClient}
+          highlightFiletype={highlightFiletype}
+          previewRef={previewRef}
+          theme={theme}
+        />
+        <ChangeRequestList
+          projectId={projectId}
+          visible={currentSection.id === "mergeRequests"}
+          focused={focusArea === "content" && !dialogOpen}
+        />
+        {!isOverview && currentSection.id !== "mergeRequests" ? (
           <box
             backgroundColor={theme.colors.surface}
             padding={1}
@@ -845,9 +564,9 @@ export const ProjectDetail = ({ projectId }: { projectId: number }) => {
               </text>
               <text fg={theme.colors.muted}>{currentSection.description}</text>
             </box>
-            <box flexGrow={1}>{renderSectionContent()}</box>
+            <box flexGrow={1}>{renderPlaceholderContent()}</box>
           </box>
-        )}
+        ) : null}
       </box>
     </box>
   );

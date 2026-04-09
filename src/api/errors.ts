@@ -87,13 +87,13 @@ export const getRateLimitError = (): AppError | null => {
 
   return {
     kind: "rate_limit",
-    message: `GitLab rate limit aktiv, erneut in ${formatDurationMs(retryAfter)}`,
+    message: `Rate limit aktiv, erneut in ${formatDurationMs(retryAfter)}`,
     retryAfter,
     status: 429,
   };
 };
 
-export const normalizeError = (error: unknown): AppError => {
+export const normalizeError = (error: unknown, providerName = "API"): AppError => {
   const status = extractStatus(error);
 
   if (status === 429) {
@@ -102,7 +102,7 @@ export const normalizeError = (error: unknown): AppError => {
 
     return {
       kind: "rate_limit",
-      message: `GitLab rate limit erreicht, erneut in ${formatDurationMs(retryAfter)}`,
+      message: `${providerName} rate limit erreicht, erneut in ${formatDurationMs(retryAfter)}`,
       retryAfter,
       status,
     };
@@ -111,7 +111,7 @@ export const normalizeError = (error: unknown): AppError => {
   if (status === 401 || status === 403) {
     return {
       kind: "auth",
-      message: "Authentifizierung bei GitLab fehlgeschlagen",
+      message: `Authentifizierung bei ${providerName} fehlgeschlagen`,
       status,
     };
   }
@@ -119,7 +119,7 @@ export const normalizeError = (error: unknown): AppError => {
   if (status === 404) {
     return {
       kind: "not_found",
-      message: "GitLab-Ressource nicht gefunden",
+      message: `${providerName}-Ressource nicht gefunden`,
       status,
     };
   }
@@ -134,7 +134,7 @@ export const normalizeError = (error: unknown): AppError => {
 
   return {
     kind: "unknown",
-    message: "Unbekannter GitLab-Fehler",
+    message: `Unbekannter ${providerName}-Fehler`,
     status,
   };
 };

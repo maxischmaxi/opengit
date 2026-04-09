@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { setActiveInstance } from "../api/client";
 import { getBlockedUntil } from "../api/errors";
-import { getCurrentUser } from "../api/gitlab";
+import { getCurrentUser } from "../api";
 import {
   DEFAULT_THEME_NAME,
   ThemeProvider,
@@ -11,8 +11,9 @@ import {
   useTheme,
   type ThemeName,
 } from "./theme";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { Header } from "../components/Header";
+
 import { HelpOverlay } from "../components/HelpOverlay";
 import { Loader } from "../components/Loader";
 import {
@@ -298,9 +299,9 @@ const AppFrame = ({ onExit }: { onExit: () => void }) => {
     <box
       flexDirection="column"
       height="100%"
+      position="relative"
       backgroundColor={theme.colors.background}
     >
-      <Header title={activeTitle} subtitle={state.activeInstance?.host} />
       <box
         flexGrow={1}
         padding={1}
@@ -336,6 +337,13 @@ const AppFrame = ({ onExit }: { onExit: () => void }) => {
         username={currentUser.data?.username ?? null}
         blockedUntil={getBlockedUntil()}
       />
+      {!state.helpOpen && dialog?.kind === "confirm" ? (
+        <ConfirmDialog
+          title={dialog.title}
+          message={dialog.message}
+          detail={dialog.detail}
+        />
+      ) : null}
     </box>
   );
 };

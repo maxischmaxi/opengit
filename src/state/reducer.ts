@@ -11,7 +11,10 @@ export type AppState = {
   activeInstance: Instance | null;
   toast: Toast | null;
   helpOpen: boolean;
-  dialog: { kind: "settings" | "theme" } | null;
+  dialog:
+    | { kind: "settings" | "theme" }
+    | { kind: "confirm"; title: string; message: string; detail?: string }
+    | null;
 };
 
 export type AppAction =
@@ -22,7 +25,12 @@ export type AppAction =
   | { type: "TOAST_CLEAR" }
   | { type: "HELP_TOGGLE" }
   | { type: "HELP_SET"; open: boolean }
-  | { type: "DIALOG_OPEN"; dialog: { kind: "settings" | "theme" } }
+  | {
+      type: "DIALOG_OPEN";
+      dialog:
+        | { kind: "settings" | "theme" }
+        | { kind: "confirm"; title: string; message: string; detail?: string };
+    }
   | { type: "DIALOG_CLOSE" };
 
 export const initialState: AppState = {

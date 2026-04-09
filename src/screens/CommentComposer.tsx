@@ -1,7 +1,7 @@
 import type { TextareaRenderable } from "@opentui/core";
 import { useRef, useState } from "react";
 
-import { createMergeRequestNote } from "../api/gitlab";
+import { createChangeRequestNote } from "../api";
 import { getTextareaThemeProps, useTheme } from "../app/theme";
 import { useDialogAwareKeyboard } from "../hooks/useDialogAwareKeyboard";
 import { showToast, useApp } from "../state/AppContext";
@@ -45,7 +45,7 @@ export const CommentComposer = ({
     setError(null);
 
     try {
-      await createMergeRequestNote(projectId, iid, body);
+      await createChangeRequestNote(projectId, iid, body);
       showToast(dispatch, "success", "Comment posted");
       navigation.pop();
     } catch (caught) {

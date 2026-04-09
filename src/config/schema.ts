@@ -1,9 +1,13 @@
 import { DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "../app/theme";
 
+export type InstanceProvider = "gitlab" | "github";
+
 export type Instance = {
+  provider: InstanceProvider;
   name: string;
   host: string;
   token: string;
+  username?: string;
   default?: boolean;
 };
 
@@ -47,34 +51,65 @@ const normalizeHost = (value: string) => {
 };
 
 export const normalizeInstance = (instance: Instance): Instance => ({
+  provider: instance.provider ?? "gitlab",
   name: instance.name.trim(),
-  host: normalizeHost(instance.host),
+  host:
+    instance.provider === "github"
+      ? "https://github.com"
+      : normalizeHost(instance.host),
   token: instance.token.trim(),
+  username: instance.username?.trim(),
   default: instance.default === true,
 });
 
 export const sameInstance = (left: Instance | null, right: Instance | null) => {
   if (!left || !right) return left === right;
-  return left.name === right.name && normalizeHost(left.host) === normalizeHost(right.host);
+  return (
+    left.provider === right.provider &&
+    left.name === right.name &&
+    normalizeHost(left.host) === normalizeHost(right.host)
+  );
 };
+
+const isInstanceProvider = (value: unknown): value is InstanceProvider =>
+  value === "gitlab" || value === "github";
 
 export const validateInstance = (value: unknown): Instance => {
   if (!isRecord(value)) {
     throw new Error("Instance must be an object");
   }
 
+  const provider: InstanceProvider = isInstanceProvider(value.provider)
+    ? value.provider
+    : "gitlab";
   const name = typeof value.name === "string" ? value.name.trim() : "";
-  const host = typeof value.host === "string" ? normalizeHost(value.host) : "";
   const token = typeof value.token === "string" ? value.token.trim() : "";
+  const username = typeof value.username === "string" ? value.username.trim() : undefined;
 
   if (!name) throw new Error("Instance name is required");
-  if (!host) throw new Error("Instance host is required");
   if (!token) throw new Error("Instance token is required");
 
+  if (provider === "github") {
+    if (!username) throw new Error("GitHub username is required");
+    return {
+      provider,
+      name,
+      host: "https://github.com",
+      token,
+      username,
+      default: value.default === true,
+    };
+  }
+
+  const host = typeof value.host === "string" ? normalizeHost(value.host) : "";
+  if (!host) throw new Error("Instance host is required");
+
   return {
+    provider,
     name,
     host,
     token,
+    username,
     default: value.default === true,
   };
 };

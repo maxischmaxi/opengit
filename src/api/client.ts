@@ -1,10 +1,8 @@
-import { Gitlab } from "@gitbeaker/rest";
-
 import type { Instance } from "../config/schema";
+import type { Provider } from "./provider";
+import { createProvider } from "./providers";
 
-export type GitlabClient = Gitlab<false>;
-
-let active: { instance: Instance; api: GitlabClient } | null = null;
+let active: { instance: Instance; provider: Provider } | null = null;
 
 export const setActiveInstance = (instance: Instance | null) => {
   if (!instance) {
@@ -14,16 +12,16 @@ export const setActiveInstance = (instance: Instance | null) => {
 
   active = {
     instance,
-    api: new Gitlab({ host: instance.host, token: instance.token }),
+    provider: createProvider(instance),
   };
 };
 
 export const getActiveInstance = () => active?.instance ?? null;
 
-export const getApi = () => {
+export const getProvider = () => {
   if (!active) {
     throw new Error("no active instance");
   }
 
-  return active.api;
+  return active.provider;
 };

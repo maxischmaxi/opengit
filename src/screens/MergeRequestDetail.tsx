@@ -1,8 +1,9 @@
 import type { TabSelectRenderable } from "@opentui/core";
 import { useEffect, useRef } from "react";
 
-import { getMergeRequest, listMergeRequestNotes } from "../api/gitlab";
+import { getChangeRequest, listChangeRequestNotes } from "../api";
 import { getTabSelectThemeProps, useTheme } from "../app/theme";
+import { useProviderKind } from "../hooks/useProviderKind";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Loader } from "../components/Loader";
@@ -32,17 +33,19 @@ export const MergeRequestDetail = ({
   tab: "overview" | "diff" | "comments";
 }) => {
   const theme = useTheme();
+  const providerKind = useProviderKind();
+  const crPrefix = providerKind === "github" ? "#" : "!";
   const { dialog } = useAppState();
   const navigation = useNavigation();
   const tabsRef = useRef<TabSelectRenderable>(null);
   const dialogOpen = dialog !== null;
   const mergeRequest = useAsync(
-    async () => getMergeRequest(projectId, iid),
+    async () => getChangeRequest(projectId, iid),
     [projectId, iid],
   );
   const notes = useAsync(
     async () =>
-      tab === "comments" ? listMergeRequestNotes(projectId, iid) : [],
+      tab === "comments" ? listChangeRequestNotes(projectId, iid) : [],
     [projectId, iid, tab],
   );
 
@@ -106,12 +109,12 @@ export const MergeRequestDetail = ({
         gap={1}
       >
         <text>
-          <strong>{`!${mr.iid} ${mr.title}`}</strong>
+          <strong>{`${crPrefix}${mr.iid} ${mr.title}`}</strong>
         </text>
         <text>
-          {`State: ${mr.state} · Author: ${mr.author?.name ?? "unknown"} · Updated: ${formatDate(mr.updated_at)}`}
+          {`State: ${mr.state} · Author: ${mr.authorName ?? "unknown"} · Updated: ${formatDate(mr.updatedAt)}`}
         </text>
-        <text>{`${mr.source_branch} → ${mr.target_branch}`}</text>
+        <text>{`${mr.sourceBranch} → ${mr.targetBranch}`}</text>
       </box>
 
       <box backgroundColor={theme.colors.surface} padding={1}>
@@ -162,7 +165,7 @@ export const MergeRequestDetail = ({
                   >
                     <text
                       fg={theme.colors.muted}
-                    >{`${note.author?.name ?? "unknown"} · ${formatDate(note.created_at)}`}</text>
+                    >{`${note.authorName ?? "unknown"} · ${formatDate(note.createdAt)}`}</text>
                     <text>{note.body}</text>
                   </box>
                 ))}

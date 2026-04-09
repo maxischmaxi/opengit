@@ -1,8 +1,7 @@
 import type { InputRenderable, SelectRenderable } from "@opentui/core";
-import type { ProjectSchema } from "@gitbeaker/rest";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { listProjects } from "../api/gitlab";
+import { listProjects, type Project } from "../api";
 import {
   getInputThemeProps,
   getSelectThemeProps,
@@ -39,7 +38,7 @@ type ProjectTreeNode = {
   path: string;
   projectCount: number;
   children: Map<string, ProjectTreeNode>;
-  projects: ProjectSchema[];
+  projects: Project[];
 };
 
 type ProjectListEntry =
@@ -54,7 +53,7 @@ type ProjectListEntry =
       key: string;
       label: string;
       description: string;
-      project: ProjectSchema;
+      project: Project;
     };
 
 const createTreeNode = (name: string, path: string): ProjectTreeNode => ({
@@ -143,13 +142,13 @@ const compressGroupNode = (node: ProjectTreeNode) => {
   };
 };
 
-const buildProjectTreeEntries = (projects: ProjectSchema[]) => {
+const buildProjectTreeEntries = (projects: Project[]) => {
   const root = createTreeNode("", "");
 
   for (const project of [...projects].sort((left, right) =>
-    left.path_with_namespace.localeCompare(right.path_with_namespace),
+    left.fullPath.localeCompare(right.fullPath),
   )) {
-    const segments = project.path_with_namespace.split("/").filter(Boolean);
+    const segments = project.fullPath.split("/").filter(Boolean);
     const groupSegments = segments.slice(0, -1);
 
     let node = root;
@@ -217,7 +216,7 @@ const buildProjectTreeEntries = (projects: ProjectSchema[]) => {
         key: `project:${item.project.id}`,
         label: `${branchPrefix}${item.project.path}`,
         description: truncate(
-          item.project.description ?? item.project.path_with_namespace,
+          item.project.description ?? item.project.fullPath,
           120,
         ),
         project: item.project,
@@ -322,10 +321,10 @@ export const ProjectsList = () => {
     return items
       .map((project) => {
         const fields = [
-          project.name_with_namespace,
-          project.path_with_namespace,
+          project.fullName,
+          project.fullPath,
           project.description ?? "",
-          project.web_url,
+          project.webUrl,
         ];
 
         const score = Math.max(
@@ -527,7 +526,7 @@ export const ProjectsList = () => {
             flexDirection="column"
           >
             <text fg={theme.colors.muted} wrapMode="none" truncate>
-              {selectedProject?.path_with_namespace ??
+              {selectedProject?.fullPath ??
                 "Select a repository to see its full path"}
             </text>
             <text fg={theme.colors.muted} wrapMode="none" truncate>
