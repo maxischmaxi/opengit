@@ -518,7 +518,6 @@ export const ProjectDetail = ({ projectId }: { projectId: number }) => {
           sidebarRef={sidebarRef}
           onChange={setSectionIndex}
         />
-
         <ProjectOverview
           visible={isOverview}
           explorerEntries={explorerEntries}
@@ -550,23 +549,6 @@ export const ProjectDetail = ({ projectId }: { projectId: number }) => {
           visible={currentSection.id === "mergeRequests"}
           focused={focusArea === "content" && !dialogOpen}
         />
-        {!isOverview && currentSection.id !== "mergeRequests" ? (
-          <box
-            backgroundColor={theme.colors.surface}
-            padding={1}
-            flexGrow={1}
-            flexDirection="column"
-            gap={1}
-          >
-            <box flexDirection="column">
-              <text>
-                <strong>{currentSection.label}</strong>
-              </text>
-              <text fg={theme.colors.muted}>{currentSection.description}</text>
-            </box>
-            <box flexGrow={1}>{renderPlaceholderContent()}</box>
-          </box>
-        ) : null}
       </box>
     </box>
   );

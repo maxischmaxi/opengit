@@ -4,7 +4,6 @@ import { listChangeRequests } from "../api";
 import {
   getInputThemeProps,
   getSelectThemeProps,
-
   useTheme,
 } from "../app/theme";
 import { useProviderKind } from "../hooks/useProviderKind";
@@ -182,32 +181,36 @@ export const ChangeRequestList = ({
       maxHeight={visible ? undefined : 0}
       overflow="hidden"
     >
-      <box backgroundColor={theme.colors.surface} padding={1} flexShrink={0} flexDirection="column">
+      <box
+        backgroundColor={theme.colors.surface}
+        padding={1}
+        flexShrink={0}
+        flexDirection="column"
+      >
         <text wrapMode="none">
           {crStates.map((state, index) => {
             const isSelected = index === stateIndex;
             const label = ` ${state} `;
             const separator = index < crStates.length - 1 ? "  " : "";
-            return isSelected ? (
-              <span key={state} fg={theme.colors.background} bg={theme.colors.accent}>
-                {label}
-              </span>
-            ) : (
-              <span key={state} fg={theme.colors.muted}>
-                {label}{separator}
+            return (
+              <span key={state}>
+                {isSelected ? (
+                  <span
+                    fg={theme.colors.background}
+                    bg={theme.colors.accent}
+                  >
+                    {label}
+                  </span>
+                ) : (
+                  <span fg={theme.colors.muted}>
+                    {label}
+                  </span>
+                )}
+                {separator}
               </span>
             );
           })}
         </text>
-        <box marginTop={1}>
-          <input
-            value={search}
-            onInput={setSearch}
-            focused={active && focusArea === "filter"}
-            placeholder={`Filter ${crLabel}`}
-            {...getInputThemeProps(theme)}
-          />
-        </box>
       </box>
 
       {result.loading ? (

@@ -8,6 +8,6 @@ export type Screen =
       kind: "mrDetail";
       projectId: number;
       iid: number;
-      tab: "overview" | "diff" | "comments";
+      tab: "overview" | "commits" | "diff";
     }
   | { kind: "commentCompose"; projectId: number; iid: number };

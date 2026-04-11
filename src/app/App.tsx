@@ -1,5 +1,5 @@
 import { useKeyboard } from "@opentui/react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { setActiveInstance } from "../api/client";
 import { getBlockedUntil } from "../api/errors";
@@ -11,11 +11,13 @@ import {
   useTheme,
   type ThemeName,
 } from "./theme";
+import { CommentEditDialog } from "../components/CommentEditDialog";
+import { CommentReplyDialog } from "../components/CommentReplyDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ErrorBanner } from "../components/ErrorBanner";
-
-import { HelpOverlay } from "../components/HelpOverlay";
+import { HelpOverlay, type KeymapSection } from "../components/HelpOverlay";
 import { Loader } from "../components/Loader";
+import { ReviewSubmitDialog } from "../components/ReviewSubmitDialog";
 import {
   SettingsDialog,
   settingsDialogKeymap,
@@ -33,11 +35,13 @@ import { useAsync } from "../hooks/useAsync";
 import { useGlobalKeys } from "../hooks/useGlobalKeys";
 import { InputFocusProvider, useInputFocusState } from "../hooks/useInputFocus";
 import { NavigationProvider } from "../navigation/NavigationProvider";
+import { loadSession, saveSession } from "../navigation/sessionStore";
 import { useNavigation } from "../navigation/useNavigation";
 import {
   CommentComposer,
   commentComposerKeymap,
 } from "../screens/CommentComposer";
+import { InlineCommentComposer } from "../screens/InlineCommentComposer";
 import {
   FirstRunWizard,
   firstRunWizardKeymap,
@@ -49,21 +53,37 @@ import {
 import {
   MergeRequestDetail,
   mergeRequestDetailKeymap,
+  overviewKeymap,
 } from "../screens/MergeRequestDetail";
 import {
   MergeRequestsList,
   mergeRequestsListKeymap,
 } from "../screens/MergeRequestsList";
-import { mergeRequestDiffKeymap } from "../screens/MergeRequestDiff";
+import { mergeRequestDiffKeymap, commentModeKeymap } from "../screens/MergeRequestDiff";
+import { NotificationProvider, useNotifications } from "../state/NotificationContext";
+import { ReviewProvider, useReview } from "../state/ReviewContext";
 import { ProjectDetail, projectDetailKeymap } from "../screens/ProjectDetail";
 import { ProjectsList, projectsListKeymap } from "../screens/ProjectsList";
 import { AppProvider, showToast, useApp } from "../state/AppContext";
 import {
   GLOBAL_KEYMAP,
-  formatKeymapHint,
   matchesKey,
   type KeymapItem,
 } from "../util/keys";
+
+const ReviewAwareStatusBar = (props: Omit<Parameters<typeof StatusBar>[0], "hint">) => {
+  const { state: reviewState } = useReview();
+  const { state: notifState } = useNotifications();
+  const parts: string[] = ["? Help"];
+  const draftCount = reviewState.drafts.length;
+  if (draftCount > 0) {
+    parts.push(`Review: ${draftCount} draft${draftCount !== 1 ? "s" : ""} · S to submit`);
+  }
+  if (notifState.unreadCount > 0) {
+    parts.push(`${notifState.unreadCount} new`);
+  }
+  return <StatusBar {...props} hint={parts.join(" · ")} />;
+};
 
 const AppFrame = ({ onExit }: { onExit: () => void }) => {
   const theme = useTheme();
@@ -205,48 +225,57 @@ const AppFrame = ({ onExit }: { onExit: () => void }) => {
   });
 
   const screenDefinition = useMemo(() => {
+    const section = (title: string, items: KeymapItem[]): KeymapSection => ({ title, items });
+
     switch (screen.kind) {
       case "wizard":
         return {
           title: screen.instanceName
             ? `Edit Instance · ${screen.instanceName}`
             : "First Run Wizard",
-          keymap: isFirstSetupWizard
+          sections: [section("Wizard", isFirstSetupWizard
             ? [...firstRunWizardKeymap, { key: "Esc", description: "Exit app" }]
-            : firstRunWizardKeymap,
+            : firstRunWizardKeymap)],
           body: <FirstRunWizard instanceName={screen.instanceName} />,
         };
       case "instancePicker":
         return {
           title: "Instance Picker",
-          keymap: instancePickerKeymap,
+          sections: [section("Instances", instancePickerKeymap)],
           body: <InstancePicker />,
         };
       case "projects":
         return {
           title: "Projects",
-          keymap: projectsListKeymap,
+          sections: [section("Projects", projectsListKeymap)],
           body: <ProjectsList />,
         };
       case "projectDetail":
         return {
           title: `Project #${screen.projectId}`,
-          keymap: projectDetailKeymap,
+          sections: [section("Project", projectDetailKeymap)],
           body: <ProjectDetail projectId={screen.projectId} />,
         };
       case "mrList":
         return {
           title: `Merge Requests · Project #${screen.projectId}`,
-          keymap: mergeRequestsListKeymap,
+          sections: [section("Merge Requests", mergeRequestsListKeymap)],
           body: <MergeRequestsList projectId={screen.projectId} />,
         };
-      case "mrDetail":
+      case "mrDetail": {
+        const sections: KeymapSection[] = [
+          section("Merge Request", mergeRequestDetailKeymap),
+        ];
+        if (screen.tab === "overview") {
+          sections.push(section("Overview", overviewKeymap));
+        }
+        if (screen.tab === "diff") {
+          sections.push(section("Diff View", mergeRequestDiffKeymap));
+          sections.push(section("Comment Mode (press c)", commentModeKeymap));
+        }
         return {
           title: `Merge Request !${screen.iid}`,
-          keymap:
-            screen.tab === "diff"
-              ? [...mergeRequestDetailKeymap, ...mergeRequestDiffKeymap]
-              : mergeRequestDetailKeymap,
+          sections,
           body: (
             <MergeRequestDetail
               projectId={screen.projectId}
@@ -255,10 +284,11 @@ const AppFrame = ({ onExit }: { onExit: () => void }) => {
             />
           ),
         };
+      }
       case "commentCompose":
         return {
           title: `Comment · !${screen.iid}`,
-          keymap: commentComposerKeymap,
+          sections: [section("Compose", commentComposerKeymap)],
           body: (
             <CommentComposer projectId={screen.projectId} iid={screen.iid} />
           ),
@@ -266,7 +296,7 @@ const AppFrame = ({ onExit }: { onExit: () => void }) => {
       default:
         return {
           title: "gl-tui",
-          keymap: [] as KeymapItem[],
+          sections: [] as KeymapSection[],
           body: <Loader label="Preparing screen…" />,
         };
     }
@@ -279,15 +309,21 @@ const AppFrame = ({ onExit }: { onExit: () => void }) => {
         ? "Theme"
         : screenDefinition.title;
 
-  const activeKeymap =
+  const activeSections: KeymapSection[] =
     dialog?.kind === "settings"
-      ? settingsDialogKeymap
+      ? [{ title: "Settings", items: settingsDialogKeymap }]
       : dialog?.kind === "theme"
-        ? themeDialogKeymap
-        : screenDefinition.keymap;
+        ? [{ title: "Theme", items: themeDialogKeymap }]
+        : screenDefinition.sections;
+
+  const awaitingInstance =
+    hydrated.current &&
+    !boot.loading &&
+    !!state.config?.instances.length &&
+    !state.activeInstance;
 
   const body =
-    !hydrated.current || boot.loading ? (
+    !hydrated.current || boot.loading || awaitingInstance ? (
       <Loader label="Loading configuration…" />
     ) : boot.error ? (
       <ErrorBanner error={boot.error as Error} />
@@ -295,56 +331,96 @@ const AppFrame = ({ onExit }: { onExit: () => void }) => {
       screenDefinition.body
     );
 
+  const reviewProjectId = screen.kind === "mrDetail" ? screen.projectId : 0;
+  const reviewIid = screen.kind === "mrDetail" ? screen.iid : 0;
+
   return (
-    <box
-      flexDirection="column"
-      height="100%"
-      position="relative"
-      backgroundColor={theme.colors.background}
-    >
+    <NotificationProvider active={!!state.activeInstance}>
+    <ReviewProvider projectId={reviewProjectId} iid={reviewIid}>
       <box
-        flexGrow={1}
-        padding={1}
+        flexDirection="column"
+        height="100%"
         position="relative"
         backgroundColor={theme.colors.background}
+        gap={1}
       >
+        <box
+          flexGrow={1}
+          position="relative"
+          backgroundColor={theme.colors.background}
+        >
+          {body}
+          {!state.helpOpen && dialog?.kind === "settings" ? (
+            <SettingsDialog
+              currentThemeName={currentThemeName}
+              onOpenTheme={openThemeDialog}
+            />
+          ) : null}
+          {!state.helpOpen && dialog?.kind === "theme" ? (
+            <ThemeDialog
+              currentThemeName={currentThemeName}
+              onSelectTheme={(themeName) => void applyTheme(themeName)}
+            />
+          ) : null}
+        </box>
+        <ReviewAwareStatusBar
+          toast={state.toast}
+          instanceName={state.activeInstance?.name ?? null}
+          username={currentUser.data?.username ?? null}
+          blockedUntil={getBlockedUntil()}
+        />
+        {!state.helpOpen && dialog?.kind === "confirm" ? (
+          <ConfirmDialog
+            title={dialog.title}
+            message={dialog.message}
+            detail={dialog.detail}
+          />
+        ) : null}
+        {!state.helpOpen && dialog?.kind === "approveConfirm" ? (
+          <ConfirmDialog
+            title="Approve"
+            message="Approve this merge request?"
+            confirmLabel="Approve"
+          />
+        ) : null}
+        {!state.helpOpen && dialog?.kind === "inlineComment" ? (
+          <InlineCommentComposer
+            position={dialog.position}
+            onClose={closeDialog}
+          />
+        ) : null}
+        {!state.helpOpen && dialog?.kind === "reviewSubmit" ? (
+          <ReviewSubmitDialog onClose={closeDialog} />
+        ) : null}
+        {!state.helpOpen && dialog?.kind === "commentReply" ? (
+          <CommentReplyDialog
+            projectId={reviewProjectId}
+            iid={reviewIid}
+            commentId={dialog.commentId}
+            authorName={dialog.authorName}
+            originalBody={dialog.body}
+            onClose={closeDialog}
+          />
+        ) : null}
+        {!state.helpOpen && dialog?.kind === "commentEdit" ? (
+          <CommentEditDialog
+            projectId={reviewProjectId}
+            iid={reviewIid}
+            commentId={dialog.commentId}
+            initialBody={dialog.body}
+            onClose={closeDialog}
+          />
+        ) : null}
         {state.helpOpen ? (
           <HelpOverlay
             title={activeTitle}
-            screenKeymap={activeKeymap}
+            sections={activeSections}
             globalKeymap={GLOBAL_KEYMAP}
-          />
-        ) : (
-          body
-        )}
-        {!state.helpOpen && dialog?.kind === "settings" ? (
-          <SettingsDialog
-            currentThemeName={currentThemeName}
-            onOpenTheme={openThemeDialog}
-          />
-        ) : null}
-        {!state.helpOpen && dialog?.kind === "theme" ? (
-          <ThemeDialog
-            currentThemeName={currentThemeName}
-            onSelectTheme={(themeName) => void applyTheme(themeName)}
           />
         ) : null}
       </box>
-      <StatusBar
-        hint={formatKeymapHint(activeKeymap)}
-        toast={state.toast}
-        instanceName={state.activeInstance?.name ?? null}
-        username={currentUser.data?.username ?? null}
-        blockedUntil={getBlockedUntil()}
-      />
-      {!state.helpOpen && dialog?.kind === "confirm" ? (
-        <ConfirmDialog
-          title={dialog.title}
-          message={dialog.message}
-          detail={dialog.detail}
-        />
-      ) : null}
-    </box>
+    </ReviewProvider>
+    </NotificationProvider>
   );
 };
 
@@ -360,12 +436,30 @@ const AppThemeShell = ({ onExit }: { onExit: () => void }) => {
   );
 };
 
-export const App = ({ onExit }: { onExit: () => void }) => (
-  <AppProvider>
-    <NavigationProvider>
-      <InputFocusProvider>
-        <AppThemeShell onExit={onExit} />
-      </InputFocusProvider>
-    </NavigationProvider>
-  </AppProvider>
-);
+export const App = ({ onExit }: { onExit: () => void }) => {
+  const [sessionStack, setSessionStack] = useState<
+    import("../navigation/screens").Screen[] | null | undefined
+  >(undefined);
+
+  useEffect(() => {
+    loadSession().then(
+      (stack) => setSessionStack(stack),
+      () => setSessionStack(null),
+    );
+  }, []);
+
+  if (sessionStack === undefined) return null;
+
+  return (
+    <AppProvider>
+      <NavigationProvider
+        initialStack={sessionStack ?? undefined}
+        onStackChange={saveSession}
+      >
+        <InputFocusProvider>
+          <AppThemeShell onExit={onExit} />
+        </InputFocusProvider>
+      </NavigationProvider>
+    </AppProvider>
+  );
+};

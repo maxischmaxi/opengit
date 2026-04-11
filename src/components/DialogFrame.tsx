@@ -1,3 +1,4 @@
+import { RGBA } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 
 import { useTheme } from "../app/theme";
@@ -39,7 +40,7 @@ export const DialogFrame = ({
       zIndex={100}
       alignItems="center"
       justifyContent="center"
-      backgroundColor={theme.colors.overlay}
+      backgroundColor={RGBA.fromInts(0, 0, 0, 77)}
     >
       <box
         width={dialogWidth}

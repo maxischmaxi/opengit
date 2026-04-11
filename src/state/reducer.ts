@@ -1,4 +1,5 @@
 import type { Config, Instance } from "../config/schema";
+import type { DiffPosition } from "../api/types";
 
 export type Toast = {
   kind: "info" | "error" | "success";
@@ -6,15 +7,21 @@ export type Toast = {
   id: number;
 };
 
+export type DialogKind =
+  | { kind: "settings" | "theme" }
+  | { kind: "confirm"; title: string; message: string; detail?: string }
+  | { kind: "inlineComment"; position: DiffPosition }
+  | { kind: "reviewSubmit" }
+  | { kind: "commentReply"; commentId: number; authorName: string; body: string; isInline: boolean }
+  | { kind: "commentEdit"; commentId: number; body: string; isInline: boolean }
+  | { kind: "approveConfirm" };
+
 export type AppState = {
   config: Config | null;
   activeInstance: Instance | null;
   toast: Toast | null;
   helpOpen: boolean;
-  dialog:
-    | { kind: "settings" | "theme" }
-    | { kind: "confirm"; title: string; message: string; detail?: string }
-    | null;
+  dialog: DialogKind | null;
 };
 
 export type AppAction =
@@ -25,12 +32,7 @@ export type AppAction =
   | { type: "TOAST_CLEAR" }
   | { type: "HELP_TOGGLE" }
   | { type: "HELP_SET"; open: boolean }
-  | {
-      type: "DIALOG_OPEN";
-      dialog:
-        | { kind: "settings" | "theme" }
-        | { kind: "confirm"; title: string; message: string; detail?: string };
-    }
+  | { type: "DIALOG_OPEN"; dialog: DialogKind }
   | { type: "DIALOG_CLOSE" };
 
 export const initialState: AppState = {

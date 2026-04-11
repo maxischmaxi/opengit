@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import type { Screen } from "./screens";
 
@@ -14,8 +14,24 @@ type NavigationContextValue = {
 
 const NavigationContext = createContext<NavigationContextValue | null>(null);
 
-export const NavigationProvider = ({ children }: { children: React.ReactNode }) => {
-  const [stack, setStack] = useState<Screen[]>([{ kind: "wizard" }]);
+type NavigationProviderProps = {
+  children: React.ReactNode;
+  initialStack?: Screen[];
+  onStackChange?: (stack: Screen[]) => void;
+};
+
+export const NavigationProvider = ({
+  children,
+  initialStack,
+  onStackChange,
+}: NavigationProviderProps) => {
+  const [stack, setStack] = useState<Screen[]>(
+    initialStack && initialStack.length > 0 ? initialStack : [{ kind: "wizard" }],
+  );
+
+  useEffect(() => {
+    onStackChange?.(stack);
+  }, [stack]);
 
   const push = useCallback((screen: Screen) => {
     setStack((current) => [...current, screen]);

@@ -1,13 +1,19 @@
 import type {
   ChangeRequest,
+  ChangeRequestCommit,
   ChangeRequestDetail,
   ChangeRequestNote,
+  DiffRefs,
   DiffResult,
+  DraftComment,
+  InlineComment,
+  Notification,
   PaginatedResult,
   Project,
   ProjectReadme,
   ProviderKind,
   RepositoryTreeEntry,
+  ReviewEvent,
   User,
 } from "./types";
 
@@ -72,6 +78,68 @@ export interface Provider {
     iid: number,
     body: string,
   ): Promise<ChangeRequestNote>;
+
+  listInlineComments(
+    projectId: number,
+    iid: number,
+  ): Promise<InlineComment[]>;
+
+  submitReview(
+    projectId: number,
+    iid: number,
+    params: {
+      event: ReviewEvent;
+      body?: string;
+      comments: DraftComment[];
+      diffRefs?: DiffRefs;
+    },
+  ): Promise<void>;
+
+  resolveInlineComment(
+    projectId: number,
+    iid: number,
+    threadId: string,
+    resolved: boolean,
+  ): Promise<void>;
+
+  replyToComment(
+    projectId: number,
+    iid: number,
+    commentId: number,
+    body: string,
+  ): Promise<void>;
+
+  editComment(
+    projectId: number,
+    iid: number,
+    commentId: number,
+    body: string,
+  ): Promise<void>;
+
+  deleteComment(
+    projectId: number,
+    iid: number,
+    commentId: number,
+  ): Promise<void>;
+
+  listChangeRequestCommits(
+    projectId: number,
+    iid: number,
+  ): Promise<ChangeRequestCommit[]>;
+
+  approveChangeRequest(
+    projectId: number,
+    iid: number,
+  ): Promise<void>;
+
+  unapproveChangeRequest(
+    projectId: number,
+    iid: number,
+  ): Promise<void>;
+
+  getNotifications(
+    options?: { since?: string },
+  ): Promise<{ notifications: Notification[]; pollInterval: number }>;
 
   validateToken(): Promise<User>;
 }
